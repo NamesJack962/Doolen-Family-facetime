@@ -235,7 +235,8 @@
             isVideoOff: false,
             currentFacingMode: 'user',
             wakeLock: null,
-            isHost: false
+            isHost: false,
+            connectionTimeout: null
         };
 
         // --- DOM Elements ---
@@ -265,13 +266,13 @@
         };
 
         const ID_PREFIX = 'doolen-family-app-';
+        const JOIN_TIMEOUT_MS = 15000; // 15 Seconds timeout for joining
 
         // --- Wake Lock API ---
         async function requestWakeLock() {
             try {
                 if ('wakeLock' in navigator) {
                     state.wakeLock = await navigator.wakeLock.request('screen');
-                    state.wakeLock.addEventListener('release', () => console.log('Wake Lock released'));
                 }
             } catch (err) { console.error(`${err.name}, ${err.message}`); }
         }
@@ -306,59 +307,92 @@
             setTimeout(() => {
                 toast.classList.add('hiding');
                 toast.addEventListener('animationend', () => toast.remove());
-            }, 3000);
+            }, 4000); // Extended time slightly for reading errors
         }
+
+        // --- Network Status Monitoring ---
+        window.addEventListener('offline', () => {
+            showNotification('No internet connection.', 'error');
+        });
+        window.addEventListener('online', () => {
+            showNotification('Back online. Reconnecting...', 'info');
+            if (state.peer && state.peer.disconnected) {
+                state.peer.reconnect();
+            }
+        });
 
         // --- Helper: Sanitize Room Name ---
         function sanitizeRoomId(input) {
-            // Convert to lowercase, remove non-alphanumeric chars to ensure valid ID
             return ID_PREFIX + input.toLowerCase().trim().replace(/[^a-z0-9-]/g, '');
         }
 
         // --- Core WebRTC Logic ---
 
         function init() {
-            // Initial state: Random Peer ID (Joiner mode by default)
-            state.peer = new Peer();
+            state.peer = new Peer({
+                debug: 1
+            });
 
             state.peer.on('open', (id) => {
                 state.myId = id;
-                // We don't display the random ID anymore
             });
 
             setupPeerListeners();
         }
 
         function setupPeerListeners() {
+            // General Peer Errors
             state.peer.on('error', (err) => {
                 console.error(err);
+                
+                // Clear any pending timeout if error occurs
+                if (state.connectionTimeout) clearTimeout(state.connectionTimeout);
+
                 if (err.type === 'unavailable-id') {
-                    showNotification('Room name is already taken.', 'error');
+                    showNotification('That room name is already being used.', 'error');
                     els.hostBtn.disabled = false;
                     els.hostBtn.innerHTML = 'Start';
+                    
+                    // If we failed to host, destroy the peer so we can try again
+                    if (state.isHost) {
+                         state.peer.destroy();
+                         init(); // Reset to client mode
+                         state.isHost = false;
+                    }
+
                 } else if (err.type === 'peer-unavailable') {
-                    showNotification('Room not found. Did the host start it?', 'error');
+                    showNotification('Room not found. Is the host ready?', 'error');
                     els.joinBtn.disabled = false;
                     els.joinBtn.innerHTML = 'Join';
+                    resetUI();
+                } else if (err.type === 'network') {
+                     showNotification('Network error. Check connection.', 'error');
+                } else if (err.type === 'disconnected') {
+                     showNotification('Disconnected from server.', 'error');
                 } else {
                     showNotification('Connection error occurred.', 'error');
                 }
-                // Only reset if we aren't in a call yet
-                if (!state.currentCall && !state.isHost) {
-                   // maybe logic here?
-                }
             });
 
-            state.peer.on('call', (call) => {
-                // Incoming call (Host receives this)
-                showNotification('Family member connecting...', 'success');
-                
-                // If we are hosting, we hide the "Waiting" message
-                els.waitingMsg.classList.add('hidden');
+            // Handle Server Disconnects
+            state.peer.on('disconnected', () => {
+                showNotification('Connection lost. Attempting reconnect...', 'info');
+                try {
+                    state.peer.reconnect();
+                } catch (e) { console.error("Reconnect failed", e); }
+            });
 
+            // Incoming Calls
+            state.peer.on('call', (call) => {
+                showNotification('Family member connecting...', 'success');
+                els.waitingMsg.classList.add('hidden');
+                
                 startLocalStream().then(() => {
                     call.answer(state.localStream);
                     handleCall(call);
+                }).catch(err => {
+                    console.error("Could not answer call", err);
+                    call.close();
                 });
             });
         }
@@ -376,22 +410,23 @@
             els.hostBtn.disabled = true;
             els.hostBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
 
-            // Destroy the random peer and create a named one
             if (state.peer) state.peer.destroy();
 
             state.peer = new Peer(roomId);
             state.isHost = true;
 
             state.peer.on('open', (id) => {
-                showNotification(`Hosting room: ${roomName}`, 'success');
+                showNotification(`Room created: ${roomName}`, 'success');
                 state.myId = id;
                 
-                // Go to call screen immediately, but show "Waiting" state
                 startLocalStream().then(() => {
                     transitionToCallScreen();
                     els.remoteLoading.classList.remove('hidden');
                     els.waitingMsg.classList.remove('hidden');
                     els.roomNameDisplay.textContent = roomName;
+                }).catch(() => {
+                    // If camera fails, revert
+                    resetUI();
                 });
             });
 
@@ -408,7 +443,7 @@
 
             const targetId = sanitizeRoomId(roomName);
 
-            if (state.peer.id === targetId) {
+            if (state.peer && state.peer.id === targetId) {
                 showNotification('You are already hosting this room!', 'error');
                 return;
             }
@@ -418,16 +453,27 @@
 
             startLocalStream().then(() => {
                 const call = state.peer.call(targetId, state.localStream);
-                // Listen for connection
+                
+                // Connection Timeout Logic
+                state.connectionTimeout = setTimeout(() => {
+                    if (state.currentCall && state.currentCall.open) return; // Call is good
+                    
+                    // If we are here, call hasn't connected yet
+                    showNotification('Connection timed out. Host may be offline.', 'error');
+                    if (call) call.close();
+                    resetUI();
+                }, JOIN_TIMEOUT_MS);
+
                 if (call) {
                     handleCall(call);
                     transitionToCallScreen();
                 } else {
-                    // Sometimes PeerJS returns undefined if immediate error, but usually triggers error event
+                    throw new Error("Call initiation failed.");
                 }
             }).catch((err) => {
-                els.joinBtn.disabled = false;
-                els.joinBtn.innerHTML = 'Join';
+                console.error("Join failed", err);
+                // Notification handled by startLocalStream or above error
+                resetUI();
             });
         }
 
@@ -444,7 +490,17 @@
                 return stream;
             } catch (err) {
                 console.error('Failed to get local stream', err);
-                showNotification('Please allow camera/microphone access.', 'error');
+                
+                let msg = 'Could not access camera/microphone.';
+                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                    msg = 'Camera permission denied. Please allow access in settings.';
+                } else if (err.name === 'NotFoundError') {
+                    msg = 'No camera or microphone found.';
+                } else if (err.name === 'NotReadableError') {
+                    msg = 'Camera/Microphone is already in use by another app.';
+                }
+                
+                showNotification(msg, 'error');
                 throw err;
             }
         }
@@ -453,9 +509,11 @@
             state.currentCall = call;
             requestWakeLock();
 
+            // Clear timeout if call connects (stream received is a good proxy for success)
             call.on('stream', (remoteStream) => {
+                if (state.connectionTimeout) clearTimeout(state.connectionTimeout);
                 els.remoteVideo.srcObject = remoteStream;
-                els.remoteLoading.classList.add('hidden'); // Video connected
+                els.remoteLoading.classList.add('hidden');
                 els.waitingMsg.classList.add('hidden');
             });
 
@@ -465,25 +523,41 @@
             });
 
             call.on('error', (err) => {
-                console.error(err);
-                showNotification('Connection lost.', 'error');
+                console.error("Call error", err);
+                showNotification('Connection dropped.', 'error');
                 resetUI();
             });
+            
+            // Monitor ICE State (Connection health)
+            const pc = call.peerConnection;
+            if (pc) {
+                pc.oniceconnectionstatechange = () => {
+                    if (pc.iceConnectionState === 'disconnected') {
+                        showNotification('Weak connection...', 'error');
+                    } else if (pc.iceConnectionState === 'failed') {
+                        showNotification('Connection failed (Firewall/Network).', 'error');
+                        call.close();
+                    } else if (pc.iceConnectionState === 'connected') {
+                         if (state.connectionTimeout) clearTimeout(state.connectionTimeout);
+                    }
+                };
+            }
         }
 
         function endCall() {
+            if (state.connectionTimeout) clearTimeout(state.connectionTimeout);
+            
             if (state.currentCall) {
                 state.currentCall.close();
             }
-            // If host, we might want to destroy peer to release name? 
-            // Yes, let's fully reset to ensure clean state
             if (state.peer) {
                 state.peer.destroy();
             }
             resetUI();
             showNotification('You left the room.', 'info');
-            // Re-init a fresh random peer for next time
-            init(); 
+            
+            // Allow time for cleanup before re-init
+            setTimeout(init, 500);
         }
 
         function transitionToCallScreen() {
@@ -493,6 +567,7 @@
         }
 
         function resetUI() {
+            if (state.connectionTimeout) clearTimeout(state.connectionTimeout);
             releaseWakeLock();
             state.isHost = false;
 
@@ -505,7 +580,7 @@
             els.localVideo.srcObject = null;
             els.remoteVideo.srcObject = null;
             
-            els.remoteLoading.classList.remove('hidden'); // Reset loading overlay
+            els.remoteLoading.classList.remove('hidden');
             els.waitingMsg.classList.add('hidden');
             els.localVideoOverlay.classList.add('hidden');
             
@@ -515,7 +590,6 @@
             
             updateMediaControlsUI();
             
-            // Reset buttons
             els.hostBtn.disabled = false;
             els.hostBtn.innerHTML = 'Start';
             els.joinBtn.disabled = false;
@@ -553,6 +627,7 @@
 
             } catch (err) {
                 console.error("Error flipping camera", err);
+                showNotification('Could not flip camera.', 'error');
                 state.currentFacingMode = state.currentFacingMode === 'user' ? 'environment' : 'user';
             }
         }
@@ -581,7 +656,6 @@
         }
 
         function updateMediaControlsUI() {
-            // Audio
             if (state.isAudioMuted) {
                 els.toggleAudioBtn.classList.replace('bg-slate-100', 'bg-rose-100');
                 els.toggleAudioBtn.classList.replace('hover:bg-slate-200', 'hover:bg-rose-200');
@@ -591,7 +665,6 @@
                 els.toggleAudioBtn.classList.replace('hover:bg-rose-200', 'hover:bg-slate-200');
                 els.toggleAudioBtn.innerHTML = '<i class="fa-solid fa-microphone text-slate-600"></i>';
             }
-            // Video
             if (state.isVideoOff) {
                 els.toggleVideoBtn.classList.replace('bg-slate-100', 'bg-rose-100');
                 els.toggleVideoBtn.classList.replace('hover:bg-slate-200', 'hover:bg-rose-200');
