@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doolen Family Facetime</title>
+    <!-- Tailwind CSS for rapid styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts: Quicksand for a friendly, rounded feel -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Quicksand', sans-serif;
+            background-color: #f0f4f8; /* Soft blue-gray background */
+            color: #334155; /* Slate-700 for text */
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85); /* Light glass */
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.1);
+        }
+
+        video {
+            transform: scaleX(-1); /* Mirror effect for natural feel */
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        /* Animation for notifications */
+        @keyframes slideIn {
+            from { transform: translateY(-100%) translateX(-50%); opacity: 0; }
+            to { transform: translateY(0) translateX(-50%); opacity: 1; }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+        .toast {
+            animation: slideIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        .toast.hiding {
+            animation: fadeOut 0.3s ease-in forwards;
+        }
+
+        /* Blob Animation */
+        @keyframes blob {
+            0% { transform: translate(0px, 0px) scale(1); }
+            33% { transform: translate(30px, -50px) scale(1.1); }
+            66% { transform: translate(-20px, 20px) scale(0.9); }
+            100% { transform: translate(0px, 0px) scale(1); }
+        }
+        .animate-blob {
+            animation: blob 7s infinite;
+        }
+        .animation-delay-2000 {
+            animation-delay: 2s;
+        }
+        .animation-delay-4000 {
+            animation-delay: 4s;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-slate-50">
+
+    <!-- Ambient Background Elements (Pastel Colors) -->
+    <div class="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
+        <div class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-40 animate-blob"></div>
+        <div class="absolute top-[-10%] right-[-10%] w-96 h-96 bg-pink-200 rounded-full mix-blend-multiply filter blur-3xl opacity-40 animate-blob animation-delay-2000"></div>
+        <div class="absolute bottom-[-20%] left-[20%] w-96 h-96 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-40 animate-blob animation-delay-4000"></div>
+    </div>
+
+    <!-- Notifications Container -->
+    <div id="notification-container" class="fixed top-5 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-sm space-y-2 pointer-events-none"></div>
+
+    <!-- Main App Container -->
+    <div class="glass-panel w-full max-w-4xl rounded-3xl p-8 md:p-10 relative transition-all duration-500 ease-in-out" id="app-container">
+        
+        <!-- Header -->
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-bold text-slate-700 mb-2 flex items-center justify-center gap-3">
+                <i class="fa-solid fa-house-chimney-user text-indigo-500"></i>
+                Doolen Family Facetime
+            </h1>
+            <p class="text-slate-500 text-base font-medium">Connect with the family, wherever they are.</p>
+        </header>
+
+        <!-- SETUP SCREEN -->
+        <div id="setup-screen" class="grid grid-cols-1 md:grid-cols-2 gap-10 divide-y md:divide-y-0 md:divide-x divide-slate-200">
+            
+            <!-- Host Section -->
+            <div class="flex flex-col items-center justify-center p-4 space-y-4">
+                <div class="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mb-2 shadow-inner">
+                    <i class="fa-solid fa-couch text-3xl text-indigo-500"></i>
+                </div>
+                <h3 class="text-2xl font-bold text-slate-700">Start a Room</h3>
+                <p class="text-slate-500 text-sm text-center px-4">Create a cozy space for the family to gather.</p>
+                
+                <div class="relative w-full max-w-xs group mt-2">
+                    <div class="text-xs font-bold text-slate-400 mb-1 ml-1 uppercase tracking-wide">Your Family Code</div>
+                    <div id="my-id" class="w-full bg-white border-2 border-indigo-100 rounded-xl py-4 px-4 text-center text-indigo-600 font-bold text-lg tracking-wider cursor-text select-all overflow-hidden text-ellipsis whitespace-nowrap shadow-sm">
+                        <i class="fa-solid fa-circle-notch fa-spin text-indigo-300"></i>
+                    </div>
+                    <button id="copy-id-btn" class="absolute right-3 top-[2.2rem] transform -translate-y-1/2 text-slate-400 hover:text-indigo-500 transition-colors p-2" title="Copy ID">
+                        <i class="fa-regular fa-copy text-lg"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Join Section -->
+            <div class="flex flex-col items-center justify-center p-4 space-y-4">
+                <div class="w-20 h-20 bg-sky-50 rounded-full flex items-center justify-center mb-2 shadow-inner">
+                    <i class="fa-solid fa-mug-hot text-3xl text-sky-500"></i>
+                </div>
+                <h3 class="text-2xl font-bold text-slate-700">Join the Chat</h3>
+                <p class="text-slate-500 text-sm text-center px-4">Enter the code from Mom or Dad to join.</p>
+                
+                <div class="w-full max-w-xs mt-2">
+                    <div class="text-xs font-bold text-slate-400 mb-1 ml-1 uppercase tracking-wide">Enter Code</div>
+                    <div class="flex gap-2">
+                        <input type="text" id="peer-id-input" placeholder="Paste code here..." class="flex-1 bg-white border-2 border-slate-200 rounded-xl py-3 px-4 text-slate-700 font-medium focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-100 transition-all placeholder-slate-400">
+                        <button id="join-btn" class="bg-sky-500 hover:bg-sky-600 text-white rounded-xl px-5 py-2 shadow-lg shadow-sky-200 transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none">
+                            <i class="fa-solid fa-video"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CALL SCREEN (Hidden by default) -->
+        <div id="call-screen" class="hidden flex flex-col space-y-8">
+            
+            <div class="flex flex-col md:flex-row justify-center items-center gap-6 w-full">
+                <!-- Local Video -->
+                <div class="relative w-full md:w-1/2 aspect-video bg-slate-100 rounded-2xl overflow-hidden shadow-md border-4 border-white group ring-1 ring-slate-200">
+                    <video id="local-video" autoplay muted playsinline class="w-full h-full object-cover"></video>
+                    <div class="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm px-4 py-1.5 rounded-full text-sm font-bold text-indigo-600 flex items-center gap-2 shadow-sm">
+                        <div class="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse"></div>
+                        Me
+                    </div>
+                    <div class="absolute inset-0 flex items-center justify-center bg-slate-100/90 z-10 hidden" id="local-video-off-overlay">
+                        <div class="flex flex-col items-center text-slate-400">
+                            <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-3 shadow-sm">
+                                <i class="fa-solid fa-video-slash text-2xl text-slate-300"></i>
+                            </div>
+                            <span class="font-medium">Camera Paused</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Remote Video -->
+                <div class="relative w-full md:w-1/2 aspect-video bg-slate-800 rounded-2xl overflow-hidden shadow-xl border-4 border-white ring-1 ring-slate-200">
+                    <video id="remote-video" autoplay playsinline class="w-full h-full object-cover"></video>
+                    <div class="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm px-4 py-1.5 rounded-full text-sm font-bold text-sky-600 flex items-center gap-2 shadow-sm">
+                        <div class="w-2.5 h-2.5 bg-sky-400 rounded-full animate-pulse"></div>
+                        Family
+                    </div>
+                     <!-- Loading State for Remote -->
+                     <div id="remote-loading" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-100 z-0">
+                        <div class="relative">
+                            <div class="w-16 h-16 border-4 border-sky-200 border-t-sky-500 rounded-full animate-spin mb-4"></div>
+                        </div>
+                        <span class="text-slate-500 font-medium">Connecting to family...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex justify-center items-center gap-6 mx-auto w-fit">
+                <button id="toggle-audio-btn" class="w-14 h-14 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all focus:outline-none focus:ring-4 focus:ring-slate-100" title="Toggle Mute">
+                    <i class="fa-solid fa-microphone text-xl"></i>
+                </button>
+                
+                <button id="end-call-btn" class="w-20 h-20 rounded-full bg-rose-500 hover:bg-rose-600 text-white flex items-center justify-center shadow-lg shadow-rose-200 hover:shadow-rose-300 transition-all transform hover:scale-105 focus:outline-none" title="End Call">
+                    <i class="fa-solid fa-phone-slash text-2xl"></i>
+                </button>
+                
+                <button id="toggle-video-btn" class="w-14 h-14 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all focus:outline-none focus:ring-4 focus:ring-slate-100" title="Toggle Camera">
+                    <i class="fa-solid fa-video text-xl"></i>
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="absolute bottom-4 text-slate-400 text-xs font-medium">
+        Made with <i class="fa-solid fa-heart text-rose-300 mx-1"></i> for the Doolen Family
+    </div>
+
+    <!-- PeerJS Library -->
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+
+    <script>
+        // --- State Management ---
+        const state = {
+            peer: null,
+            currentCall: null,
+            localStream: null,
+            myId: null,
+            isAudioMuted: false,
+            isVideoOff: false
+        };
+
+        // --- DOM Elements ---
+        const els = {
+            myIdDisplay: document.getElementById('my-id'),
+            peerIdInput: document.getElementById('peer-id-input'),
+            setupScreen: document.getElementById('setup-screen'),
+            callScreen: document.getElementById('call-screen'),
+            localVideo: document.getElementById('local-video'),
+            remoteVideo: document.getElementById('remote-video'),
+            remoteLoading: document.getElementById('remote-loading'),
+            localVideoOverlay: document.getElementById('local-video-off-overlay'),
+            copyBtn: document.getElementById('copy-id-btn'),
+            joinBtn: document.getElementById('join-btn'),
+            endCallBtn: document.getElementById('end-call-btn'),
+            toggleAudioBtn: document.getElementById('toggle-audio-btn'),
+            toggleVideoBtn: document.getElementById('toggle-video-btn'),
+            notificationContainer: document.getElementById('notification-container')
+        };
+
+        // --- Notification System (Updated for Light Theme) ---
+        function showNotification(message, type = 'info') {
+            const toast = document.createElement('div');
+            // Colors based on type - Updated for light theme
+            let bgClass = 'bg-white border-slate-200';
+            let iconClass = 'fa-info-circle';
+            let textClass = 'text-slate-700';
+
+            if (type === 'success') { bgClass = 'bg-green-50 border-green-200'; iconClass = 'fa-check-circle text-green-500'; textClass = 'text-green-800'; }
+            if (type === 'error') { bgClass = 'bg-rose-50 border-rose-200'; iconClass = 'fa-circle-exclamation text-rose-500'; textClass = 'text-rose-800'; }
+            if (type === 'info') { bgClass = 'bg-sky-50 border-sky-200'; iconClass = 'fa-info-circle text-sky-500'; textClass = 'text-sky-800'; }
+
+            toast.className = `toast pointer-events-auto flex items-center p-4 mb-3 rounded-xl border ${bgClass} shadow-lg shadow-slate-200/50 backdrop-blur-sm max-w-sm mx-auto transform -translate-x-1/2 left-1/2 fixed`;
+            toast.innerHTML = `
+                <div class="flex-shrink-0 mr-3">
+                    <i class="fa-solid ${iconClass} text-lg"></i>
+                </div>
+                <div class="text-sm font-bold ${textClass}">${message}</div>
+            `;
+
+            els.notificationContainer.appendChild(toast);
+
+            // Remove after 3 seconds
+            setTimeout(() => {
+                toast.classList.add('hiding');
+                toast.addEventListener('animationend', () => toast.remove());
+            }, 3000);
+        }
+
+        // --- Copy to Clipboard Helper ---
+        function copyToClipboard(text) {
+            // Fallback for iFrames
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.opacity = "0";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showNotification('Code copied! Send it to family.', 'success');
+                } else {
+                    showNotification('Failed to copy code.', 'error');
+                }
+            } catch (err) {
+                showNotification('Unable to copy code automatically.', 'error');
+            }
+            
+            document.body.removeChild(textArea);
+        }
+
+        // --- Core WebRTC Logic ---
+
+        function init() {
+            // Initialize PeerJS
+            state.peer = new Peer();
+
+            state.peer.on('open', (id) => {
+                state.myId = id;
+                els.myIdDisplay.textContent = id;
+                // Remove spinner styling
+                els.myIdDisplay.innerHTML = id;
+            });
+
+            state.peer.on('error', (err) => {
+                console.error(err);
+                let msg = 'An error occurred with the connection.';
+                if (err.type === 'peer-unavailable') msg = 'Family member not found. Check the code.';
+                if (err.type === 'unavailable-id') msg = 'ID is taken.';
+                showNotification(msg, 'error');
+                resetUI();
+            });
+
+            // Handle Incoming Calls
+            state.peer.on('call', (call) => {
+                showNotification('Family is calling...', 'success');
+                
+                // Get local media
+                navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                    .then((stream) => {
+                        handleLocalStream(stream);
+                        call.answer(stream); // Answer call with our stream
+                        handleCall(call);
+                        transitionToCallScreen();
+                    })
+                    .catch((err) => {
+                        console.error('Failed to get local stream', err);
+                        showNotification('Please allow camera/microphone access.', 'error');
+                    });
+            });
+        }
+
+        function handleLocalStream(stream) {
+            state.localStream = stream;
+            els.localVideo.srcObject = stream;
+            updateMediaControlsUI();
+        }
+
+        function makeCall() {
+            const peerId = els.peerIdInput.value.trim();
+            if (!peerId) {
+                showNotification('Please enter the family code.', 'error');
+                return;
+            }
+            if (peerId === state.myId) {
+                showNotification('You cannot call yourself!', 'error');
+                return;
+            }
+
+            els.joinBtn.disabled = true;
+            els.joinBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                .then((stream) => {
+                    handleLocalStream(stream);
+                    const call = state.peer.call(peerId, stream);
+                    handleCall(call);
+                    transitionToCallScreen();
+                })
+                .catch((err) => {
+                    console.error('Failed to get local stream', err);
+                    showNotification('Could not access camera/microphone.', 'error');
+                    els.joinBtn.disabled = false;
+                    els.joinBtn.innerHTML = '<i class="fa-solid fa-video"></i>';
+                });
+        }
+
+        function handleCall(call) {
+            state.currentCall = call;
+
+            // Wait for their stream
+            call.on('stream', (remoteStream) => {
+                els.remoteVideo.srcObject = remoteStream;
+                els.remoteLoading.classList.add('hidden'); // Hide loading spinner
+            });
+
+            call.on('close', () => {
+                showNotification('Call ended.', 'info');
+                resetUI();
+            });
+
+            call.on('error', (err) => {
+                console.error(err);
+                showNotification('Call connection lost.', 'error');
+                resetUI();
+            });
+        }
+
+        function endCall() {
+            if (state.currentCall) {
+                state.currentCall.close();
+            }
+            resetUI();
+            showNotification('You left the chat.', 'info');
+        }
+
+        // --- UI Transitions & Controls ---
+
+        function transitionToCallScreen() {
+            els.setupScreen.classList.add('hidden');
+            els.callScreen.classList.remove('hidden');
+            // Reset Join Button state
+            els.joinBtn.disabled = false;
+            els.joinBtn.innerHTML = '<i class="fa-solid fa-video"></i>';
+        }
+
+        function resetUI() {
+            // Stop all tracks
+            if (state.localStream) {
+                state.localStream.getTracks().forEach(track => track.stop());
+            }
+            state.localStream = null;
+            state.currentCall = null;
+
+            // Reset Video Elements
+            els.localVideo.srcObject = null;
+            els.remoteVideo.srcObject = null;
+            
+            // Reset UI states
+            els.remoteLoading.classList.remove('hidden');
+            els.localVideoOverlay.classList.add('hidden');
+            state.isAudioMuted = false;
+            state.isVideoOff = false;
+            updateMediaControlsUI();
+
+            // Switch Screens
+            els.callScreen.classList.add('hidden');
+            els.setupScreen.classList.remove('hidden');
+        }
+
+        function toggleAudio() {
+            if (!state.localStream) return;
+            const audioTrack = state.localStream.getAudioTracks()[0];
+            if (audioTrack) {
+                state.isAudioMuted = !state.isAudioMuted;
+                audioTrack.enabled = !state.isAudioMuted;
+                updateMediaControlsUI();
+                showNotification(state.isAudioMuted ? 'Microphone muted' : 'Microphone active', 'info');
+            }
+        }
+
+        function toggleVideo() {
+            if (!state.localStream) return;
+            const videoTrack = state.localStream.getVideoTracks()[0];
+            if (videoTrack) {
+                state.isVideoOff = !state.isVideoOff;
+                videoTrack.enabled = !state.isVideoOff;
+                
+                // Toggle UI overlay for local video
+                if (state.isVideoOff) {
+                    els.localVideoOverlay.classList.remove('hidden');
+                } else {
+                    els.localVideoOverlay.classList.add('hidden');
+                }
+                
+                updateMediaControlsUI();
+                showNotification(state.isVideoOff ? 'Camera paused' : 'Camera active', 'info');
+            }
+        }
+
+        function updateMediaControlsUI() {
+            // Audio Button
+            if (state.isAudioMuted) {
+                els.toggleAudioBtn.classList.replace('bg-slate-100', 'bg-rose-100');
+                els.toggleAudioBtn.classList.replace('hover:bg-slate-200', 'hover:bg-rose-200');
+                els.toggleAudioBtn.innerHTML = '<i class="fa-solid fa-microphone-slash text-rose-500"></i>';
+            } else {
+                els.toggleAudioBtn.classList.replace('bg-rose-100', 'bg-slate-100');
+                els.toggleAudioBtn.classList.replace('hover:bg-rose-200', 'hover:bg-slate-200');
+                els.toggleAudioBtn.innerHTML = '<i class="fa-solid fa-microphone text-slate-600 text-xl"></i>';
+            }
+
+            // Video Button
+            if (state.isVideoOff) {
+                els.toggleVideoBtn.classList.replace('bg-slate-100', 'bg-rose-100');
+                els.toggleVideoBtn.classList.replace('hover:bg-slate-200', 'hover:bg-rose-200');
+                els.toggleVideoBtn.innerHTML = '<i class="fa-solid fa-video-slash text-rose-500"></i>';
+            } else {
+                els.toggleVideoBtn.classList.replace('bg-rose-100', 'bg-slate-100');
+                els.toggleVideoBtn.classList.replace('hover:bg-rose-200', 'hover:bg-slate-200');
+                els.toggleVideoBtn.innerHTML = '<i class="fa-solid fa-video text-slate-600 text-xl"></i>';
+            }
+        }
+
+        // --- Event Listeners ---
+        els.copyBtn.addEventListener('click', () => {
+            const idText = els.myIdDisplay.innerText;
+            if (idText && idText.trim() !== '') {
+                copyToClipboard(idText);
+            }
+        });
+
+        els.joinBtn.addEventListener('click', makeCall);
+        els.endCallBtn.addEventListener('click', endCall);
+        els.toggleAudioBtn.addEventListener('click', toggleAudio);
+        els.toggleVideoBtn.addEventListener('click', toggleVideo);
+
+        // Initialization
+        init();
+
+    </script>
+</body>
+</html>
