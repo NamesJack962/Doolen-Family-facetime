@@ -273,17 +273,9 @@
         const ID_PREFIX = 'doolen-family-app-v2-';
         const JOIN_TIMEOUT_MS = 20000; // 20 Seconds timeout for joining
 
-        // --- PeerJS Configuration (STUN Servers for Mobile) ---
+        // --- PeerJS Configuration (Standard P2P) ---
         const PEER_CONFIG = {
-            debug: 1,
-            config: {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' },
-                    { urls: 'stun:stun3.l.google.com:19302' }
-                ]
-            }
+            debug: 1
         };
 
         // --- Wake Lock API ---
@@ -353,7 +345,7 @@
         // --- Core WebRTC Logic ---
 
         function init() {
-            // Create peer with STUN config
+            // Create peer with Standard config
             state.peer = new Peer(PEER_CONFIG);
 
             state.peer.on('open', (id) => {
